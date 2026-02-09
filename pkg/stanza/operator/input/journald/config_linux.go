@@ -212,7 +212,7 @@ func (c Config) buildNewCmdFunc() (func(ctx context.Context, logger *zap.Logger,
 			strings.Join(journalArgs, " "))
 
 		if c.RootPath != "" {
-			logCmd = fmt.Sprintf("%s Chroot: '%s'", logCmd, c.RootPath)
+			logCmd = fmt.Sprintf("%s Chroot: %q", logCmd, c.RootPath)
 		}
 
 		logger.Info(logCmd)

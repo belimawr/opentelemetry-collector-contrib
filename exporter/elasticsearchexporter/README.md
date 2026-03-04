@@ -169,8 +169,7 @@ The Elasticsearch exporter supports several document schemas and preprocessing
 behaviours, which may be configured through the following settings:
 
 - `mapping`:
-  - `mode` (DEPRECATED) The mapping mode if supplied via config file is deprecated and will soon be ignored. Use the `X-Elastic-Mapping-Mode` client metadata key or the `elastic.mapping.mode` scope attribute instead. If not specified via these methods, the default mapping mode is `otel`.
-
+  - `mode` (DEPRECATED): The mapping mode if supplied via config file is ignored. Use the `X-Elastic-Mapping-Mode` client metadata key or the `elastic.mapping.mode` scope attribute instead. If not specified via these methods, the default mapping mode is `otel`.
   - `allowed_modes` (defaults to all mapping modes): A list of allowed mapping modes.
 
 The mapping mode can be controlled via the client metadata key `X-Elastic-Mapping-Mode`,
@@ -426,6 +425,22 @@ The metric types supported are:
 - Exponential histogram (Delta temporality only)
 - Summary
 
+### Metrics dynamic templates
+
+For metrics, the exporter sends **per-document `dynamic_templates`** with each bulk index action so that Elasticsearch can apply the correct mapping to metric fields. It uses the [bulk API `dynamic_templates` parameter](https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-bulk):
+
+> A map from the full name of fields to the name of dynamic templates. It defaults to an empty map. If a name matches a dynamic template, that template will be applied regardless of other match predicates defined in the template. If a field is already defined in the mapping, then this parameter won't be used.
+
+The index template must define dynamic templates whose names match the values sent by the exporter. Behavior depends on the mapping mode:
+
+| Mapping mode | Field path in document | Template names sent | Notes |
+| ------------ | ---------------------- | -------------------- | ----- |
+| **OTel**     | `metrics.<metric name>` | `histogram`, `summary`, `gauge_double`, `gauge_long`, `counter_double`, `counter_long` | The OTel data plugin defines more specific templates. |
+| **ECS**      | `metric.<metric name>`  | `histogram_metrics`, `summary_metrics`, `double_metrics` | Relies on core templates in [metrics@mappings](https://github.com/elastic/elasticsearch/blob/8.15/x-pack/plugin/core/template-resources/src/main/resources/metrics%40mappings.json). Intended to match the [APM metrics ingest pipeline](https://github.com/elastic/elasticsearch/blob/b34960a2b450869aee2866e91c647e0026dd6953/x-pack/plugin/apm-data/src/main/resources/ingest-pipelines/metrics-apm%40pipeline.yaml). |
+
+- **OTel**: Each metric is written under the `metrics` object; the bulk action maps full field names (e.g. `metrics.my_metric`) to one of the OTel template names above based on metric type (histogram, summary, gauge, or counter) and value type.
+- **ECS**: Each metric is written as a top-level field `metric.<name>`; the bulk action maps that field name to one of the ECS/APM template names (`histogram_metrics`, `summary_metrics`, or `double_metrics` for gauges and counters).
+
 ## Exporting profiles
 
 Profiles support is currently in development, and should not be used in
@@ -542,27 +557,6 @@ It is recommended to enrich events using the [elasticapmprocessor](https://githu
 ### Compound Mapping
 
 There are ECS fields that are not mapped easily 1 to 1 but require more advanced logic.
-
-#### `agent.name`
-
-The agent name takes the form of a compound name consisting of 3 components:
-- `telemetry.sdk.name` or, if not present, defaults to `otlp`,
-- `telemetry.sdk.language`, defaulting to `unknown` in case it is missing,
-- `telemetry.distro.name`, which is allowed to be empty.
-
-These values are all valid:
-
-| `telemetry.sdk.name` | `telemetry.sdk.language` | `telemetry.distro.name` | `agent.name`           |
-|----------------------|--------------------------|-------------------------|------------------------|
-| ""                   | ""                       | ""                      | `otlp/unknown`                 |
-| ""                   | dotnet                   | ""                      | `otlp/dotnet`          |
-| opentelemetry        | dotnet                   | ""                      | `opentelemetry/dotnet` |
-| ""                   | java                     | parts-unlimited-java    | `otlp/java/parts-unlimited-java` |
-| ""                   | ""                       | parts-unlimited-java    | `otlp/unknown/parts-unlimited-java` |
-
-#### `agent.version`
-
-Takes the value of `telemetry.distro.version` or `telemetry.sdk.version`. If both telemetry.distro.version and telemetry.sdk.version are present, telemetry.distro.version takes precedence.
 
 #### `host.name` and `host.hostname`
 

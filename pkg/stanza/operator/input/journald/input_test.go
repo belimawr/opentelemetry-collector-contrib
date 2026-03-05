@@ -72,7 +72,7 @@ func TestInputJournald(t *testing.T) {
 	err = op.SetOutputs([]operator.Operator{mockOutput})
 	require.NoError(t, err)
 
-	op.(*Input).newCmd = func(_ context.Context, _ *zap.Logger, _ []byte) cmd {
+	op.(*Input).newCmd = func(_ context.Context, _ []byte) cmd {
 		return &fakeJournaldCmd{}
 	}
 
@@ -302,10 +302,10 @@ func TestBuildConfigCmd(t *testing.T) {
 		t.Run(tt.Name, func(t *testing.T) {
 			cfg := NewConfigWithID("my_journald_input")
 			tt.Config(cfg)
-			newCmdFunc, err := cfg.buildNewCmdFunc()
+			newCmdFunc, err := cfg.buildNewCmdFunc(zap.NewNop())
 
 			require.NoError(t, err)
-			cmd := newCmdFunc(t.Context(), zap.NewNop(), nil).(*exec.Cmd)
+			cmd := newCmdFunc(t.Context(), nil).(*exec.Cmd)
 			tt.RequireCmd(cmd)
 		})
 	}
@@ -313,17 +313,17 @@ func TestBuildConfigCmd(t *testing.T) {
 
 func TestBuildConfigCmdCursor(t *testing.T) {
 	cfg := NewConfigWithID("my_journald_input")
-	newCmdFunc, err := cfg.buildNewCmdFunc()
+	newCmdFunc, err := cfg.buildNewCmdFunc(zap.NewNop())
 	require.NoError(t, err)
 
-	cmd := newCmdFunc(t.Context(), zap.NewNop(), []byte("cursor-value")).(*exec.Cmd)
+	cmd := newCmdFunc(t.Context(), []byte("cursor-value")).(*exec.Cmd)
 	assert.Contains(t, cmd.Args, "--after-cursor")
 	assert.Contains(t, cmd.Args, "cursor-value")
 
-	cmd = newCmdFunc(t.Context(), zap.NewNop(), []byte("  ")).(*exec.Cmd)
+	cmd = newCmdFunc(t.Context(), []byte("  ")).(*exec.Cmd)
 	assert.NotContains(t, cmd.Args, "--after-cursor")
 
-	cmd = newCmdFunc(t.Context(), zap.NewNop(), []byte{}).(*exec.Cmd)
+	cmd = newCmdFunc(t.Context(), []byte{}).(*exec.Cmd)
 	assert.NotContains(t, cmd.Args, "--after-cursor")
 }
 
@@ -403,7 +403,7 @@ func TestInputJournaldError(t *testing.T) {
 	err = op.SetOutputs([]operator.Operator{mockOutput})
 	require.NoError(t, err)
 
-	op.(*Input).newCmd = func(_ context.Context, _ *zap.Logger, _ []byte) cmd {
+	op.(*Input).newCmd = func(_ context.Context, _ []byte) cmd {
 		return &fakeJournaldCmd{
 			exitError:  &exec.ExitError{},
 			startError: errors.New("fail to start"),
